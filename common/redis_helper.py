@@ -2,65 +2,60 @@ import redis
 
 """Redis Helper Class for Redis Operations"""
 
-""" Sample data
-BMP280        - Temperature: 29.61 °C, Pressure: 95519.41 hPa, Altitude: 494.97 m
-Accelerometer - X: 0.10 m/s^2, Y: -0.06 m/s^2, Z: 9.94 m/s^2, Gyro X: 0.01 °/s, Y: 0.01 °/s, Z: 0.00 °/s, Temperature: 30.21 °C
-Magnetometer  - X: -1.01 µT, Y: -19.83 µT, Z: -18.55 µT
-Temp Sensor   - Temperature: 29.44 °C
-GPS           - Latitude: 52.13, Longitude: -106.64, Altitude: 219.80 m, Speed: 0.50 knots, Angle: 204.92 °
-"""
-#------------ Keys -----------------
+class TelemetryKeys:
+    """Class to hold telemetry keys for easy access and reuse."""
+    
+    # BMP280
+    BMP280_TEMP     = "bmp280.temp"
+    BMP280_PRESSURE = "bmp280.pressure"
+    BMP280_ALTITUDE = "bmp280.altitude"
 
-# BMP280
-BMP280_TEMP     = "bmp280.temp"
-BMP280_PRESSURE = "bmp280.pressure"
-BMP280_ALTITUDE = "bmp280.altitude"
+    # Accelerometer
+    ACCEL_X         = "accel.x"
+    ACCEL_Y         = "accel.y"
+    ACCEL_Z         = "accel.z"
+    GYRO_X          = "gyro.x"
+    GYRO_Y          = "gyro.y"
+    GYRO_Z          = "gyro.z"
+    ACCEL_TEMP      = "accel.temp"
 
-# Accelerometer
-ACCEL_X         = "accel.x"
-ACCEL_Y         = "accel.y"
-ACCEL_Z         = "accel.z"
-GYRO_X          = "gyro.x"
-GYRO_Y          = "gyro.y"
-GYRO_Z          = "gyro.z"
-ACCEL_TEMP      = "accel.temp"
+    # Magnetometer
+    MAG_X           = "mag.x"
+    MAG_Y           = "mag.y"
+    MAG_Z           = "mag.z"
 
-# Magnetometer
-MAG_X           = "mag.x"
-MAG_Y           = "mag.y"
-MAG_Z           = "mag.z"
+    # Temp Sensor
+    TEMP_SENSOR     = "temp.temp"
 
-# Temp Sensor
-TEMP_SENSOR     = "temp.temp"
+    # GPS
+    GPS_LATITUDE    = "gps.latitude"
+    GPS_LONGITUDE   = "gps.longitude"
+    GPS_ALTITUDE    = "gps.altitude"
+    GPS_SPEED       = "gps.speed"
+    GPS_ANGLE       = "gps.angle"
 
-# GPS
-GPS_LATITUDE    = "gps.latitude"
-GPS_LONGITUDE   = "gps.longitude"
-GPS_ALTITUDE    = "gps.altitude"
-GPS_SPEED       = "gps.speed"
-GPS_ANGLE       = "gps.angle"
-
-KEYS = [
-    BMP280_TEMP,
-    BMP280_PRESSURE,
-    BMP280_ALTITUDE,
-    ACCEL_X,
-    ACCEL_Y,
-    ACCEL_Z,
-    GYRO_X,
-    GYRO_Y,
-    GYRO_Z,
-    ACCEL_TEMP,
-    MAG_X,
-    MAG_Y,
-    MAG_Z,
-    TEMP_SENSOR,
-    GPS_LATITUDE,
-    GPS_LONGITUDE,
-    GPS_ALTITUDE,
-    GPS_SPEED,
-    GPS_ANGLE
-]
+    # All keys
+    KEYS = [
+        BMP280_TEMP,
+        BMP280_PRESSURE,
+        BMP280_ALTITUDE,
+        ACCEL_X,
+        ACCEL_Y,
+        ACCEL_Z,
+        GYRO_X,
+        GYRO_Y,
+        GYRO_Z,
+        ACCEL_TEMP,
+        MAG_X,
+        MAG_Y,
+        MAG_Z,
+        TEMP_SENSOR,
+        GPS_LATITUDE,
+        GPS_LONGITUDE,
+        GPS_ALTITUDE,
+        GPS_SPEED,
+        GPS_ANGLE
+    ]
 
 class RedisHelper():
     def __init__(self, host='localhost', port=6379, db=0, flight_name="LC2025"):
@@ -69,7 +64,7 @@ class RedisHelper():
         self.flight_name = flight_name
         if self.redis.ping():
             print("Connected to Redis")
-            for key in KEYS:
+            for key in TelemetryKeys.KEYS:
                 k = f"{flight_name}.{key}"
                 if not self.redis.exists(k):
                     self.redis_ts.create(k, retention_msecs=604800000)  # 7 days retention
