@@ -34,6 +34,9 @@ class TelemetryKeys:
     GPS_SPEED       = "gps.speed"
     GPS_ANGLE       = "gps.angle"
 
+    # Timestamp
+    TIMESTAMP       = "timestamp"
+
     # All keys
     KEYS = [
         BMP280_TEMP,
@@ -54,7 +57,8 @@ class TelemetryKeys:
         GPS_LONGITUDE,
         GPS_ALTITUDE,
         GPS_SPEED,
-        GPS_ANGLE
+        GPS_ANGLE,
+        TIMESTAMP
     ]
 
 class RedisHelper():

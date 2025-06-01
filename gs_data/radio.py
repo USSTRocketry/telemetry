@@ -1,14 +1,14 @@
 import time
 import board
 import digitalio
-import adafruit_rfm9x
+from adafruit_rfm9x.adafruit_rfm9x import RFM9x
 
 class RFM95Radio():
     def __init__(self, cs_pin, reset_pin, spi=board.SPI(), frequency=915.0, baudrate=4000000, node=1):
         self.cs = digitalio.DigitalInOut(cs_pin)
-        self.reset = digitalio.DigitalInOut(reset_pin)
-        self.radio = adafruit_rfm9x.RFM9x(spi, self.cs, self.reset, frequency, baudrate)
-        self.radio.get_sync_word(0x12)  # Set sync word to 0x12
+        self.reset_pin = digitalio.DigitalInOut(reset_pin)
+        self.radio = RFM9x(spi, self.cs, self.reset_pin, frequency, baudrate=baudrate)
+        #self.radio.set_sync_word(0x12)  # Set sync word to 0x12
         self.radio.enable_crc = True
         self.radio.node = node
         self.radio.destination = node + 1
@@ -16,16 +16,12 @@ class RFM95Radio():
 
     def send(self, data):
         self.radio.send(data)
-        print(f"Sent: {data}")
     
     def receive(self) -> str:
         packet = self.radio.receive(timeout=1.0)  # Wait for 1 second for a packet
         if packet is not None:
-            recv = str(packet, 'ascii')
-            print(f"Received: {recv}")
-            return recv
+            return packet
         else:
-            print("No packet received")
             return None
     
     def rssi(self):
