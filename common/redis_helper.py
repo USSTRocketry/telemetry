@@ -1,41 +1,111 @@
 import redis
+from typing import Tuple
 
 """Redis Helper Class for Redis Operations"""
+
+class TelemetryKey():
+    def __init__(self, key, labels: dict, unit=None):
+        self.key = key
+        self.labels = labels
+    # return the key if object is referened as a string
+    def __str__(self):
+        return self.key
 
 class TelemetryKeys:
     """Class to hold telemetry keys for easy access and reuse."""
     
     # BMP280
-    BMP280_TEMP     = "bmp280.temp"
-    BMP280_PRESSURE = "bmp280.pressure"
-    BMP280_ALTITUDE = "bmp280.altitude"
+    BMP280_TEMP     = TelemetryKey(
+        "bmp280.temperature",
+        {"sensor": "bmp280", "name": "Temperature", "unit": "C"}
+    )
+    BMP280_PRESSURE = TelemetryKey(
+        "bmp280.pressure",
+        {"sensor": "bmp280", "name": "Pressure", "unit": "hPa"}
+    )
+    BMP280_ALTITUDE = TelemetryKey(
+        "bmp280.altitude",
+        {"sensor": "bmp280", "name": "Altitude", "unit": "ft"}
+    )
 
     # Accelerometer
-    ACCEL_X         = "accel.x"
-    ACCEL_Y         = "accel.y"
-    ACCEL_Z         = "accel.z"
-    GYRO_X          = "gyro.x"
-    GYRO_Y          = "gyro.y"
-    GYRO_Z          = "gyro.z"
-    ACCEL_TEMP      = "accel.temp"
+    ACCEL_X = TelemetryKey(
+        "accel.x",
+        {"sensor": "accel", "name": "X", "unit": "g"}
+    )
+    ACCEL_Y = TelemetryKey(
+        "accel.y",
+        {"sensor": "accel", "name": "Y", "unit": "g"}
+    )
+    ACCEL_Z = TelemetryKey(
+        "accel.z",
+        {"sensor": "accel", "name": "Z", "unit": "g"}
+    )
+    GYRO_X = TelemetryKey(
+        "gyro.x",
+        {"sensor": "gyro", "name": "X", "unit": "deg/s"}
+    )
+    GYRO_Y = TelemetryKey(
+        "gyro.y",
+        {"sensor": "gyro", "name": "Y", "unit": "deg/s"}
+    )
+    GYRO_Z = TelemetryKey(
+        "gyro.z",
+        {"sensor": "gyro", "name": "Z", "unit": "deg/s"}
+    )
+    # ACCEL_TEMP      = TelemetryKey("accel.temperature", "Temperature", "C")
+    ACCEL_TEMP      = TelemetryKey(
+        "accel.temperature",
+        {"sensor": "accel", "name": "Temperature", "unit": "C"}
+    )
 
     # Magnetometer
-    MAG_X           = "mag.x"
-    MAG_Y           = "mag.y"
-    MAG_Z           = "mag.z"
+    MAG_X = TelemetryKey(
+        "mag.x",
+        {"sensor": "mag", "name": "X", "unit": "uT"}
+    )
+    MAG_Y = TelemetryKey(
+        "mag.y",
+        {"sensor": "mag", "name": "Y", "unit": "uT"}
+    )
+    MAG_Z = TelemetryKey(
+        "mag.z",
+        {"sensor": "mag", "name": "Z", "unit": "uT"}
+    )
 
     # Temp Sensor
-    TEMP_SENSOR     = "temp.temp"
+    TEMP_SENSOR     = TelemetryKey(
+        "temp.temperature",
+        {"sensor": "temp", "name": "Temperature", "unit": "C"}
+    )
 
     # GPS
-    GPS_LATITUDE    = "gps.latitude"
-    GPS_LONGITUDE   = "gps.longitude"
-    GPS_ALTITUDE    = "gps.altitude"
-    GPS_SPEED       = "gps.speed"
-    GPS_ANGLE       = "gps.angle"
+    GPS_LATITUDE = TelemetryKey(
+        "gps.latitude", 
+        {"sensor": "gps", "name": "Latitude", "unit": "degrees"}
+    )
+    GPS_LONGITUDE = TelemetryKey(
+        "gps.longitude", 
+        {"sensor": "gps", "name": "Longitude", "unit": "degrees"}
+    )
+    GPS_ALTITUDE = TelemetryKey(
+        "gps.altitude", 
+        {"sensor": "gps", "name": "Altitude", "unit": "m"}
+    )
+    GPS_SPEED = TelemetryKey(
+        "gps.speed", 
+        {"sensor": "gps", "name": "Speed", "unit": "m/s"}
+    )
+    GPS_ANGLE = TelemetryKey(
+        "gps.angle", 
+        {"sensor": "gps", "name": "Angle", "unit": "degrees"}
+    )
 
     # Timestamp
-    TIMESTAMP       = "timestamp"
+    TIMESTAMP = TelemetryKey(
+        "timestamp",
+        {"sensor": "system", "name": "Timestamp", "unit": "ms"}
+    )
 
     # All keys
     KEYS = [
@@ -63,23 +133,28 @@ class TelemetryKeys:
 
 class RedisHelper():
     def __init__(self, host='localhost', port=6379, db=0, flight_name="LC2025"):
-        self.redis = redis.StrictRedis(host=host, port=port, db=db)
+        self.redis = redis.Redis(host=host, port=port, db=db)
         self.redis_ts = self.redis.ts()
         self.flight_name = flight_name
         if self.redis.ping():
             print("Connected to Redis")
-            for key in TelemetryKeys.KEYS:
-                k = f"{flight_name}.{key}"
-                if not self.redis.exists(k):
-                    self.redis_ts.create(k, retention_msecs=604800000)  # 7 days retention
+            for k in TelemetryKeys.KEYS:
+                key = f"{flight_name}.{k.key}" # Prefix keys with flight name
+                if not self.redis.exists(key):
+                    self.redis_ts.create(key,
+                                         retention_msecs=604800000,
+                                         labels=k.labels
+                                        )  # 7 days retention
+                    print(f"Created timeseries for {key}")
+            self.redis.set("current_flight", flight_name)
         else:
             print("Failed to connect to Redis")
     
-    def _key(self, key):
+    def _key(self, key: Tuple[TelemetryKey, str]) -> str:
         """
         Helper function to format the key with flight name.
         """
-        return f"{self.flight_name}.{key}"
+        return f"{self.flight_name}.{str(key)}"
 
     def set(self, key, value):
         self.redis.set(self._key(key), value)
@@ -99,6 +174,7 @@ class RedisHelper():
         except redis.exceptions.ResponseError as e:
             print(f"Error appending to timeseries: {e}")
             return None
+
     def ts_append_with_timestamp(self, key, timestamp, value):
         try:
             return self.redis_ts.add(self._key(key), timestamp, value)
