@@ -1,0 +1,17 @@
+[Unit]
+Description=USST Ground Station Telemetry Daemon
+After=network.target redis.service
+
+[Service]
+Type=simple
+WorkingDirectory=${GS_PROJECT_DIR}
+ExecStart=/usr/bin/python3 gs_ctl.py telemetry_daemon
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+User=rpi
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=multi-user.target

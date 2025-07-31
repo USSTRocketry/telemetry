@@ -1,7 +1,7 @@
 import time
 import board
 import digitalio
-from adafruit_rfm9x.adafruit_rfm9x import RFM9x
+from adafruit_rfm9x import RFM9x
 
 class RFM95Radio():
     def __init__(self, cs_pin, reset_pin, spi=board.SPI(), frequency=915.0, baudrate=4000000, node=1):

@@ -136,17 +136,20 @@ class RedisHelper():
         self.redis = redis.Redis(host=host, port=port, db=db)
         self.redis_ts = self.redis.ts()
         self.flight_name = flight_name
+
+    def init_keys(self):
         if self.redis.ping():
             print("Connected to Redis")
             for k in TelemetryKeys.KEYS:
-                key = f"{flight_name}.{k.key}" # Prefix keys with flight name
+                key = f"{self.flight_name}.{k.key}"  # Prefix keys with flight name
                 if not self.redis.exists(key):
-                    self.redis_ts.create(key,
-                                         retention_msecs=604800000,
-                                         labels=k.labels
-                                        )  # 7 days retention
+                    self.redis_ts.create(
+                    key,
+                    retention_msecs=604800000,
+                    labels=k.labels
+                    )  # 7 days retention
                     print(f"Created timeseries for {key}")
-            self.redis.set("current_flight", flight_name)
+            self.redis.set("current_flight", self.flight_name)
         else:
             print("Failed to connect to Redis")
     

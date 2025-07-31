@@ -1,3 +1,4 @@
+import json
 from multiprocessing import Process, Queue
 from common.redis_helper import RedisHelper, TelemetryKeys
 from .radio import RFM95Radio
@@ -6,6 +7,8 @@ import struct
 import time
 from enum import Enum
 
+
+TASKS_KEY = "gs:tasks"
 
 class PacketType(Enum):
     PING = 1
@@ -158,10 +161,11 @@ class TelemetryData:
 
 
 class TelemetryDataProcess(Process):
-    def __init__(self):
+    def __init__(self, flight_name=FLIGHT):
         super().__init__()
         self.queue = Queue()
-        self.redis_helper = RedisHelper(flight_name=FLIGHT)
+        self.redis_helper = RedisHelper(flight_name)
+        self.redis_helper.init_keys()
 
         # default SPI bus (SPI0) 
         #   SCLK = GPIO11 (Pin 23)
@@ -262,6 +266,44 @@ class TelemetryDataProcess(Process):
                         return False
         print("No acknowledgment received within timeout. Frequency switch aborted.")
         return False
+    
+    def handle_task(self, task):
+        task_id = task["task_id"]
+        task_type = task["task"]
+        params = task.get("params", {})
+
+        try:
+            if task_type == "change_frequency":
+                freq = params["frequency"]
+                # sanity check
+                if not (900 <= freq <= 930):
+                    raise ValueError("Frequency must be between 900 MHz and 930 MHz")
+                res = self.perform_frequency_change(freq)
+                if res:
+                    result = f"Frequency change to {freq} MHz completed"
+                    self.redis_helper.set("frequency", freq)
+                else:
+                    result = f"Frequency change to {freq} MHz failed"
+            elif task_type == "force_ground_frequency":
+                freq = params["frequency"]
+                # sanity check
+                if not (900 <= freq <= 930):
+                    raise ValueError("Frequency must be between 900 MHz and 930 MHz")
+                self.radio.set_frequency(freq)
+                self.redis_helper.set("frequency", freq)
+                result = f"Local frequency set to {freq} MHz"
+            elif task_type == "send_flight_ready":
+                result = "TODO: Flight ready command sent"
+            elif task_type == "set_ground_station_id":
+                result = f"TODO: Ground station ID set to {params['id']}"
+            elif task_type == "set_rocket_id":
+                result = f"TODO: Rocket ID set to {params['id']}"
+            else:
+                result = f"Unknown task: {task_type}"
+        except Exception as e:
+            result = f"[ERROR] {str(e)}"
+
+        self.redis_helper.redis.set(f"gs:response:{task_id}", result, ex=10)
 
 
     def run(self):
@@ -276,5 +318,13 @@ class TelemetryDataProcess(Process):
                 self.handle_command(command)
             else:
                 print(f"Invalid packet type: {pkt_type}")
+            # Check for tasks in the queue
+            task_json = self.redis_helper.redis.lpop(TASKS_KEY)
+            if task_json:
+                try:
+                    task = json.loads(task_json)
+                    self.handle_task(task)
+                except Exception as e:
+                    print(f"[TASK ERROR] {e}")
             time.sleep(0.2)
 
