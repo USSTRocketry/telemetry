@@ -4,6 +4,21 @@ from .radio import RFM95Radio
 import board
 import struct
 import time
+from enum import Enum
+
+
+class PacketType(Enum):
+    PING = 1
+    ACK_PONG = 2
+    SENSOR_DATA = 3
+    COMMAND = 4
+
+class NetworkCommands(Enum):
+    ENABLE_DEBUGGING = 1
+    FLIGHT_READY = 2
+    SWITCH_RADIO_FREQUENCY = 3
+
+
 
 FLIGHT = "TEST01"
 
@@ -163,6 +178,15 @@ class TelemetryDataProcess(Process):
         while data is None:
             data = self.radio.receive()
         
+        if len(data) > 0:
+            return data
+        else:
+            return None
+    
+    def handle_command(self, command):
+        pass
+
+    def handle_telemetry(self, data):
         # Decode the data, convert back to floating point and construct TelemetryData
         telemetry_data = TelemetryData()
         if telemetry_data.unpack(data):
@@ -192,9 +216,65 @@ class TelemetryDataProcess(Process):
         
     def db_str(self):
         return self._db_str
+    
+    def perform_frequency_change(self, frequency):
+        """
+        Protocol Flow:
+        1. Peripheral receives a message from the ground station: 
+            Format: [COMMAND, SWITCH_RADIO_FREQUENCY, <float frequency in MHz>]
+        2. Validates the message format and extracts the desired frequency.
+        3. Sends an acknowledgment echoing the same command and frequency back to the ground station.
+        4. Waits for up to 3 seconds to receive a final "Ack" from the ground station confirming the switch.
+        5. If acknowledgment is received within timeout:
+            - Applies the new frequency to the radio.
+        6. If not acknowledged in time:
+            - Aborts the procedure; frequency remains unchanged.
+
+        Ground Station Responsibilities:
+            - Send initial command with target frequency.
+            - Wait for peripheral's echo response (3 second timeout).
+            - Respond with final acknowledgment only if echo is correct.
+            - Switch local frequency only after sending acknowledgment.
+        """
+
+        freq_cmd = f"{PacketType.COMMAND.value}{NetworkCommands.SWITCH_RADIO_FREQUENCY.value}"
+        # add freq value as a 4-byte float
+        freq_bytes = struct.pack("<f", frequency)
+        self.radio.send(freq_cmd.encode() + freq_bytes)
+        # Wait for ACK. 3 seconds timeout
+        cur_time = time.time()
+        while time.time() - cur_time < 3:
+            ack = self.receive()
+            if ack is not None and len(ack) == 6:
+                # Check if the command matches
+                if ack[0] == PacketType.ACK_PONG.value \
+                    and ack[1] == NetworkCommands.SWITCH_RADIO_FREQUENCY.value:
+                    # Extract frequency from the response
+                    received_freq = struct.unpack("<f", ack[2:])[0]
+                    if received_freq == frequency:
+                        print(f"Frequency switch confirmed to {frequency} MHz")
+                        # send ack
+                        self.radio.send(f"{PacketType.ACK_PONG.value}{NetworkCommands.SWITCH_RADIO_FREQUENCY.value}".encode())
+                        self.radio.set_frequency(frequency)
+                        return True
+                    else:
+                        print(f"Frequency mismatch: expected {frequency}, got {received_freq}")
+                        return False
+        print("No acknowledgment received within timeout. Frequency switch aborted.")
+        return False
+
 
     def run(self):
         while True:
-            self.receive()
+            data = self.receive()
+            pkt_type = data[0]
+            if pkt_type == PacketType.SENSOR_DATA.value:
+                telemetry = data[1:]
+                self.handle_telemetry(telemetry)
+            elif pkt_type == PacketType.COMMAND.value:
+                command = data[1:]
+                self.handle_command(command)
+            else:
+                print(f"Invalid packet type: {pkt_type}")
             time.sleep(0.2)
 
