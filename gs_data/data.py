@@ -1,5 +1,9 @@
 import json
+import os
+import csv
+import uuid
 from multiprocessing import Process, Queue
+from datetime import datetime
 from common.redis_helper import RedisHelper, TelemetryKeys
 from .radio import RFM95Radio
 import board
@@ -167,6 +171,7 @@ class TelemetryDataProcess(Process):
         self.redis_helper = RedisHelper(flight_name)
         self.redis_helper.init_keys()
 
+
         # default SPI bus (SPI0) 
         #   SCLK = GPIO11 (Pin 23)
         #   MOSI = GPIO10 (Pin 19)
@@ -174,6 +179,31 @@ class TelemetryDataProcess(Process):
         spi = board.SPI() 
 
         self.radio = RFM95Radio(spi=spi, cs_pin=board.D17, reset_pin=board.D27, frequency=915.0, baudrate=4000000, node=1)
+        
+        # CSV logging setup
+        self.telemetry_dir = "/opt/telemetry"
+        os.makedirs(self.telemetry_dir, exist_ok=True)
+        start_time = datetime.now().strftime("%Y%m%dT%H%M%S")
+        unique_id = uuid.uuid4().hex[:8]
+        self.csv_filename = f"{flight_name}_{start_time}_{unique_id}.csv"
+        self.csv_path = os.path.join(self.telemetry_dir, self.csv_filename)
+        self.csv_file = open(self.csv_path, "a", newline="")
+        self.csv_writer = None
+        self.csv_headers = [
+            "bmp280_temp", "bmp280_pressure", "bmp280_altitude",
+            "accel_x", "accel_y", "accel_z",
+            "gyro_x", "gyro_y", "gyro_z",
+            "imu_temp", "mag_x", "mag_y", "mag_z",
+            "extra_temp_sensor", "gps_latitude", "gps_longitude",
+            "gps_altitude", "gps_speed", "gps_angle", "timestamp"
+        ]
+        # Write headers if file is new
+        if os.stat(self.csv_path).st_size == 0:
+            self.csv_writer = csv.DictWriter(self.csv_file, fieldnames=self.csv_headers)
+            self.csv_writer.writeheader()
+            self.csv_file.flush()
+        else:
+            self.csv_writer = csv.DictWriter(self.csv_file, fieldnames=self.csv_headers)
 
         self._db_str = ""
     
@@ -215,6 +245,14 @@ class TelemetryDataProcess(Process):
             self.redis_helper.ts_append(TelemetryKeys.GPS_SPEED, telemetry_data.gps_speed)
             self.redis_helper.ts_append(TelemetryKeys.GPS_ANGLE, telemetry_data.gps_angle)
             self.redis_helper.ts_append(TelemetryKeys.TIMESTAMP, telemetry_data.timestamp)
+            # CSV logging
+            try:
+                row = {k: getattr(telemetry_data, k) for k in self.csv_headers}
+                self.csv_writer.writerow(row)
+                self.csv_file.flush()
+                os.fsync(self.csv_file.fileno())
+            except Exception as e:
+                print(f"[CSV ERROR] {e}")
         else:
             print("Failed to unpack telemetry data")
         
@@ -307,24 +345,30 @@ class TelemetryDataProcess(Process):
 
 
     def run(self):
-        while True:
-            data = self.receive()
-            pkt_type = data[0]
-            if pkt_type == PacketType.SENSOR_DATA.value:
-                telemetry = data[1:]
-                self.handle_telemetry(telemetry)
-            elif pkt_type == PacketType.COMMAND.value:
-                command = data[1:]
-                self.handle_command(command)
-            else:
-                print(f"Invalid packet type: {pkt_type}")
-            # Check for tasks in the queue
-            task_json = self.redis_helper.redis.lpop(TASKS_KEY)
-            if task_json:
-                try:
-                    task = json.loads(task_json)
-                    self.handle_task(task)
-                except Exception as e:
-                    print(f"[TASK ERROR] {e}")
-            time.sleep(0.2)
+        try:
+            while True:
+                data = self.receive()
+                pkt_type = data[0]
+                if pkt_type == PacketType.SENSOR_DATA.value:
+                    telemetry = data[1:]
+                    self.handle_telemetry(telemetry)
+                elif pkt_type == PacketType.COMMAND.value:
+                    command = data[1:]
+                    self.handle_command(command)
+                else:
+                    print(f"Invalid packet type: {pkt_type}")
+                # Check for tasks in the queue
+                task_json = self.redis_helper.redis.lpop(TASKS_KEY)
+                if task_json:
+                    try:
+                        task = json.loads(task_json)
+                        self.handle_task(task)
+                    except Exception as e:
+                        print(f"[TASK ERROR] {e}")
+                time.sleep(0.2)
+        finally:
+            try:
+                self.csv_file.close()
+            except Exception:
+                pass
 
