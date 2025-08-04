@@ -4,7 +4,7 @@ import digitalio
 from adafruit_rfm9x import RFM9x
 
 class RFM95Radio():
-    def __init__(self, cs_pin, reset_pin, spi=board.SPI(), frequency=915.0, baudrate=4000000, node=1):
+    def __init__(self, cs_pin, reset_pin, spi=board.SPI(), frequency=915.0, baudrate=4000000, node=100):
         self.cs = digitalio.DigitalInOut(cs_pin)
         self.reset_pin = digitalio.DigitalInOut(reset_pin)
         self.radio = RFM9x(spi, self.cs, self.reset_pin, frequency, baudrate=baudrate)
@@ -12,7 +12,7 @@ class RFM95Radio():
         self.radio.enable_crc = True
         self.radio.node = node
         self.radio.destination = node + 1
-        self.radio.tx_power = 23  # Set transmit power to maximum (23 dBm)
+        self.radio.tx_power = 20  # Set transmit power to maximum (23 dBm)
 
     def send(self, data):
         self.radio.send(data)
