@@ -285,8 +285,11 @@ class TelemetryDataProcess(Process):
         self.radio.send(freq_cmd.encode() + freq_bytes)
         # Wait for ACK. 3 seconds timeout
         cur_time = time.time()
+        print("sent frequency change command. Waiting for ACK")
         while time.time() - cur_time < 3:
             ack = self.receive()
+            if ack is not None:
+                print("Potential ACK received. Checking...")
             if ack is not None and len(ack) == 6:
                 # Check if the command matches
                 if ack[0] == PacketType.ACK_PONG.value \
@@ -309,7 +312,8 @@ class TelemetryDataProcess(Process):
         task_id = task["task_id"]
         task_type = task["task"]
         params = task.get("params", {})
-
+        
+        print(f"Got Task: {task}")
         try:
             if task_type == "change_frequency":
                 freq = params["frequency"]
