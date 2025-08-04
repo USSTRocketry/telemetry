@@ -168,7 +168,7 @@ class TelemetryDataProcess(Process):
     def __init__(self, flight_name=FLIGHT):
         super().__init__()
         self.queue = Queue()
-        self.redis_helper = RedisHelper(flight_name)
+        self.redis_helper = RedisHelper(flight_name=flight_name)
         self.redis_helper.init_keys()
 
 
@@ -181,7 +181,7 @@ class TelemetryDataProcess(Process):
         self.radio = RFM95Radio(spi=spi, cs_pin=board.D17, reset_pin=board.D27, frequency=915.0, baudrate=4000000, node=1)
         
         # CSV logging setup
-        self.telemetry_dir = "/opt/telemetry"
+        self.telemetry_dir = "/home/rpi/Data"
         os.makedirs(self.telemetry_dir, exist_ok=True)
         start_time = datetime.now().strftime("%Y%m%dT%H%M%S")
         unique_id = uuid.uuid4().hex[:8]
