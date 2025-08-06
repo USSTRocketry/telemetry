@@ -306,12 +306,35 @@ class TelemetryDataProcess(Process):
                              NetworkCommands.SWITCH_RADIO_FREQUENCY.value)
                         self.radio.send(packet)
                         self.radio.set_frequency(frequency)
-                        return True
+                        return True, ""
                     else:
                         print(f"Frequency mismatch: expected {frequency}, got {received_freq}")
-                        return False
+                        return False, f"Frequency mismatch: expected {frequency}, got {received_freq}"
         print("No acknowledgment received within timeout. Frequency switch aborted.")
-        return False
+        return False, "No acknowledgment received within timeout."
+    
+    def send_flight_ready(self):
+        """
+        Send a flight ready command to the rocket.
+        """
+        packet = struct.pack("<BB",
+                             PacketType.COMMAND.value,
+                             NetworkCommands.FLIGHT_READY.value)
+        self.radio.send(packet)
+        print("Flight ready command sent. Waiting for ack...")
+        cur_time = time.time()
+        while time.time() - cur_time < 3:
+            ack = self.receive()
+            if ack is not None:
+                print("Potential ACK received. Checking...")
+            if ack is not None and len(ack) == 2:
+                # Check if the command matches
+                if ack[0] == PacketType.ACK_PONG.value \
+                    and ack[1] == NetworkCommands.FLIGHT_READY.value:
+                    print("Flight ready command acknowledged by rocket.")
+                    return True, ""
+        print("No acknowledgment received within timeout. Flight ready command failed.")
+        return False, "No acknowledgment received within timeout."
     
     def handle_task(self, task):
         task_id = task["task_id"]
@@ -325,12 +348,12 @@ class TelemetryDataProcess(Process):
                 # sanity check
                 if not (900 <= freq <= 930):
                     raise ValueError("Frequency must be between 900 MHz and 930 MHz")
-                res = self.perform_frequency_change(freq)
+                res, err = self.perform_frequency_change(freq)
                 if res:
                     result = f"Frequency change to {freq} MHz completed"
                     self.redis_helper.set("frequency", freq)
                 else:
-                    result = f"Frequency change to {freq} MHz failed"
+                    result = f"ERROR: {err}"
             elif task_type == "force_ground_frequency":
                 freq = params["frequency"]
                 # sanity check
@@ -340,11 +363,15 @@ class TelemetryDataProcess(Process):
                 self.redis_helper.set("frequency", freq)
                 result = f"Local frequency set to {freq} MHz"
             elif task_type == "send_flight_ready":
-                result = "TODO: Flight ready command sent"
+                res, err = self.send_flight_ready()
+                if res:
+                    result = "Flight ready command sent successfully"
+                else:
+                    result = f"ERROR: {err}"
             elif task_type == "set_ground_station_id":
-                result = f"TODO: Ground station ID set to {params['id']}"
+                result = f"ERROR: Unimplemented."
             elif task_type == "set_rocket_id":
-                result = f"TODO: Rocket ID set to {params['id']}"
+                result = f"ERROR: Unimplemented."
             else:
                 result = f"Unknown task: {task_type}"
         except Exception as e:
