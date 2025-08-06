@@ -42,7 +42,7 @@ class RFM95Radio():
         self.radio.tx_power = power
 
     def set_frequency(self, frequency):
-        self.radio.frequency = frequency
+        self.radio.frequency_mhz = frequency
 
     def reset(self):
         self.radio.reset()

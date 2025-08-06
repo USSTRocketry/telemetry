@@ -178,7 +178,8 @@ class TelemetryDataProcess(Process):
         #   MISO = GPIO9 (Pin 21)
         spi = board.SPI() 
 
-        self.radio = RFM95Radio(spi=spi, cs_pin=board.D17, reset_pin=board.D27, frequency=915.0, baudrate=4000000, node=1)
+        self.radio = RFM95Radio(spi=spi, cs_pin=board.D17, reset_pin=board.D27, 
+                                frequency=915, baudrate=4000000, node=100)
         
         # CSV logging setup
         self.telemetry_dir = "/home/rpi/Data"
@@ -209,8 +210,8 @@ class TelemetryDataProcess(Process):
     
     def receive(self):
         data = self.radio.receive()
-        while data is None:
-            data = self.radio.receive()
+        if data is None:
+            return None
         
         if len(data) > 0:
             return data
@@ -279,13 +280,14 @@ class TelemetryDataProcess(Process):
             - Switch local frequency only after sending acknowledgment.
         """
 
-        freq_cmd = f"{PacketType.COMMAND.value}{NetworkCommands.SWITCH_RADIO_FREQUENCY.value}"
-        # add freq value as a 4-byte float
-        freq_bytes = struct.pack("<f", frequency)
-        self.radio.send(freq_cmd.encode() + freq_bytes)
+        packet = struct.pack("<BBf",
+                             PacketType.COMMAND.value,
+                             NetworkCommands.SWITCH_RADIO_FREQUENCY.value,
+                             frequency)
+        self.radio.send(packet)
         # Wait for ACK. 3 seconds timeout
         cur_time = time.time()
-        print("sent frequency change command. Waiting for ACK")
+        print(f"sent frequency change command [{packet}]. Waiting for ACK")
         while time.time() - cur_time < 3:
             ack = self.receive()
             if ack is not None:
@@ -299,7 +301,10 @@ class TelemetryDataProcess(Process):
                     if received_freq == frequency:
                         print(f"Frequency switch confirmed to {frequency} MHz")
                         # send ack
-                        self.radio.send(f"{PacketType.ACK_PONG.value}{NetworkCommands.SWITCH_RADIO_FREQUENCY.value}".encode())
+                        packet = struct.pack("<BB",
+                             PacketType.ACK_PONG.value,
+                             NetworkCommands.SWITCH_RADIO_FREQUENCY.value)
+                        self.radio.send(packet)
                         self.radio.set_frequency(frequency)
                         return True
                     else:
@@ -352,15 +357,16 @@ class TelemetryDataProcess(Process):
         try:
             while True:
                 data = self.receive()
-                pkt_type = data[0]
-                if pkt_type == PacketType.SENSOR_DATA.value:
-                    telemetry = data[1:]
-                    self.handle_telemetry(telemetry)
-                elif pkt_type == PacketType.COMMAND.value:
-                    command = data[1:]
-                    self.handle_command(command)
-                else:
-                    print(f"Invalid packet type: {pkt_type}")
+                if data is not None:
+                    pkt_type = data[0]
+                    if pkt_type == PacketType.SENSOR_DATA.value:
+                        telemetry = data[1:]
+                        self.handle_telemetry(telemetry)
+                    elif pkt_type == PacketType.COMMAND.value:
+                        command = data[1:]
+                        self.handle_command(command)
+                    else:
+                        print(f"Invalid packet type: {pkt_type}")
                 # Check for tasks in the queue
                 task_json = self.redis_helper.redis.lpop(TASKS_KEY)
                 if task_json:
