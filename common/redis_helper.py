@@ -100,6 +100,10 @@ class TelemetryKeys:
         "gps.angle", 
         {"sensor": "gps", "name": "Angle", "unit": "degrees"}
     )
+    GPS_COORDS_STR = TelemetryKey(
+        "gps.coords_str", 
+        {"sensor": "gps", "name": "Coordinates", "unit": "km"}
+    )
 
     # Timestamp
     TIMESTAMP = TelemetryKey(
@@ -128,6 +132,7 @@ class TelemetryKeys:
         GPS_ALTITUDE,
         GPS_SPEED,
         GPS_ANGLE,
+        GPS_COORDS_STR,
         TIMESTAMP
     ]
 

@@ -77,6 +77,7 @@ class TelemetryData:
         self.gps_altitude = 0
         self.gps_speed = 0
         self.gps_angle = 0
+        self.gps_coords_str = ""
         self.timestamp = 0
     
     def unpack(self, data: str):
@@ -124,9 +125,10 @@ class TelemetryData:
             self.gps_latitude = int(self.gps_latitude)/1e7
             self.gps_longitude = int(self.gps_longitude)/1e7
             self.gps_altitude = int(self.gps_altitude)/10
-            self.gps_speed = int(self.gps_speed)/100
+            self.gps_speed = (int(self.gps_speed)/100)* 0.514444  # Convert knots to m/s
             self.gps_angle = int(self.gps_angle)/100
             self.timestamp = int(self.timestamp)
+            self.gps_coords_str = f"{self.gps_latitude:.7f}, {self.gps_longitude:.7f}"
             
             return True
         except struct.error as e:
@@ -245,6 +247,7 @@ class TelemetryDataProcess(Process):
             self.redis_helper.ts_append(TelemetryKeys.GPS_ALTITUDE, telemetry_data.gps_altitude)
             self.redis_helper.ts_append(TelemetryKeys.GPS_SPEED, telemetry_data.gps_speed)
             self.redis_helper.ts_append(TelemetryKeys.GPS_ANGLE, telemetry_data.gps_angle)
+            self.redis_helper.ts_append(TelemetryKeys.GPS_COORDS_STR, telemetry_data.gps_coords_str)
             self.redis_helper.ts_append(TelemetryKeys.TIMESTAMP, telemetry_data.timestamp)
             # CSV logging
             try:
